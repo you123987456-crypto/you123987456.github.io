@@ -452,6 +452,23 @@
   .pill.danger{ border-color: rgba(255,107,107,.35); color:#ffd2d2; }
 
   .divider{height:1px;background:var(--line);margin:10px 0}
+
+.key.danger{
+  border-color: rgba(255,107,107,.55);
+  background: rgba(255,107,107,.18);
+  color: #ffecec;
+}
+
+.key.danger:active{
+  background: rgba(255,107,107,.28);
+}
+
+.key.danger .small{
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .9;
+}
+
 </style>
 </head>
 
@@ -470,16 +487,11 @@
     </div>
 
     <div class="top-actions">
+      <button class="btn small" id="btnOpenIndex">Topへ</button>
       <button class="btn ghost" id="btnSlots" title="問題一覧">一覧</button>
       <button class="btn primary" id="btnNew" title="新しい問題">新規</button>
       <button class="btn" id="btnMore" title="その他">…</button>
     </div>
-  </div>
-
-  <div class="rcbar" id="rcBar">
-    <b>行</b><span class="mono" id="missRow">-</span>
-    <b>列</b><span class="mono" id="missCol">-</span>
-    <b>3×3</b><span class="mono" id="missBox">-</span>
   </div>
 
   <div class="main">
@@ -510,9 +522,17 @@
       <button class="key digit" data-n="8"><div class="kNum">8</div><div class="kRem">残:9</div></button>
       <button class="key digit" data-n="9"><div class="kNum">9</div><div class="kRem">残:9</div></button>
 
-      <button class="key secondary" id="btnUndo">Undo</button>
-      <button class="key secondary" id="btnRedo">Redo</button>
-      <button class="key secondary" id="btnErase">消す（値/メモ）</button>
+      
+<button class="key secondary history" id="btnUndo">
+  Undo<br><span class="small" id="undoCount"></span>
+</button>
+
+      
+<button class="key secondary history" id="btnRedo">
+  Redo<br><span class="small" id="redoCount"></span>
+</button>
+
+      <button class="key secondary danger" id="btnErase">消す<br><span class="small">(値/メモ)</span></button>
     </div>
   </div>
 </div>
@@ -625,10 +645,6 @@
   const btnResetCurrent = document.getElementById('btnResetCurrent');
   const btnClearUndo = document.getElementById('btnClearUndo');
 
-  const missRowEl = document.getElementById('missRow');
-  const missColEl = document.getElementById('missCol');
-  const missBoxEl = document.getElementById('missBox');
-
   // Board state
   let values = Array.from({length:9}, ()=>Array(9).fill(0));
   let givens = Array.from({length:9}, ()=>Array(9).fill(false));
@@ -691,12 +707,22 @@ try{
     sel = {r: s.sel.r, c: s.sel.c};
   }
 
-  function updateHistoryButtons(){
-    btnUndo.disabled = undoStack.length === 0;
-    btnRedo.disabled = redoStack.length === 0;
-    btnUndo.textContent = undoStack.length ? `Undo (${undoStack.length})` : 'Undo';
-    btnRedo.textContent = redoStack.length ? `Redo (${redoStack.length})` : 'Redo';
-  }
+
+function updateHistoryButtons(){
+  const u = undoStack.length;
+  const r = redoStack.length;
+
+  btnUndo.disabled = u === 0;
+  btnRedo.disabled = r === 0;
+
+  // 1行目は固定なので触らない
+  document.getElementById('undoCount').textContent =
+    u > 0 ? `(${u})` : '';
+
+  document.getElementById('redoCount').textContent =
+    r > 0 ? `(${r})` : '';
+}
+
 
   function pushUndo(action){
     if(isRestoring) return;
@@ -958,10 +984,6 @@ try{
     progressBadge.className = 'badge ' + (b.cls || '');
     slotLabel.textContent = `問題 #${Number(currentSlotId)}`;
 
-    missRowEl.textContent = maskToSpaced(FULL & ~masks.rowMask[sel.r]);
-    missColEl.textContent = maskToSpaced(FULL & ~masks.colMask[sel.c]);
-    missBoxEl.textContent = maskToSpaced(FULL & ~masks.boxMask[selB]);
-
     for(let r=0;r<9;r++){
       for(let c=0;c<9;c++){
         const o = cells[idx(r,c)];
@@ -1009,16 +1031,26 @@ try{
   }
 
   // Core edits with undo
-  function setValue(r,c,n){
-    if(givens[r][c]) return false;
-    const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
-    values[r][c]=n;
-    if(n!==0) memos[r][c]=0;
-    const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
-    if(prev.v===next.v && prev.m===next.m && prev.g===next.g) return false;
-    pushUndo({kind:'cell', r,c, prev, next});
-    return true;
+function setValue(r,c,n){
+  // 固定マスでも、固定編集ONなら上書きOK
+  if(givens[r][c] && !givenEdit) return false;
+
+  const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+
+  values[r][c] = n;
+  if(n !== 0) memos[r][c] = 0;
+
+  // ★ 固定編集ONなら、入力した数字を固定にする
+  if(givenEdit && n !== 0){
+    givens[r][c] = true;
   }
+
+  const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+  if(prev.v===next.v && prev.m===next.m && prev.g===next.g) return false;
+
+  pushUndo({kind:'cell', r,c, prev, next});
+  return true;
+}
 
   function toggleMemo(r,c,n){
     if(givens[r][c]) return false;
@@ -1459,7 +1491,9 @@ try{
       if(e.target === m) closeModal(m);
     });
   });
-
+document.getElementById('btnOpenIndex').addEventListener('click', ()=>{
+  location.href = './index.html';
+});
   // Boot
   function boot(){
     initBoardUI();
