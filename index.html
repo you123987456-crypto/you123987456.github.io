@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f17" />
+  <title>ナンプレ支援ツール - インデックス</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    :root{
+      --bg:#0b0f17;
+      --text:#e8eefc;
+      --muted:#9fb0d0;
+      --line:rgba(255,255,255,.10);
+      --line2:rgba(255,255,255,.18);
+      --accent:#5aa7ff;
+      --ok:#2ce59b;
+      --warn:#ffd166;
+      --danger:#ff6b6b;
+      --radius:14px;
+      --tap:48px;
+      --shadow: 0 16px 44px rgba(0,0,0,.45);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:
+        radial-gradient(1200px 700px at 70% -10%, rgba(90,167,255,.25), transparent 55%),
+        radial-gradient(1000px 800px at -10% 10%, rgba(44,229,155,.16), transparent 55%),
+        var(--bg);
+      color:var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x:hidden;
+    }
+    a{color:inherit; text-decoration:none}
+    .app{
+      min-height:100dvh;
+      padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border-radius: var(--radius);
+      position:sticky;
+      top:0;
+      backdrop-filter: blur(8px);
+      z-index:10;
+    }
+    .brand{display:flex; flex-direction:column; gap:2px; min-width:0}
+    .brand h1{font-size:16px; margin:0; font-weight:900; letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .brand .sub{font-size:12px; color:var(--muted)}
+
+    .btn{
+      min-height: var(--tap);
+      padding: 10px 12px;
+      border-radius: 12px;
+      border:1px solid var(--line2);
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      font-weight:800;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+    .btn:active{transform: translateY(1px)}
+    .btn.primary{border-color: rgba(90,167,255,.45); background: rgba(90,167,255,.14)}
+    .btn.good{border-color: rgba(44,229,155,.45); background: rgba(44,229,155,.12)}
+    .btn.small{min-height:40px; padding:8px 10px; font-size:13px; border-radius: 11px}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap:12px;
+      align-items:start;
+    }
+    @media (max-width: 840px){ .grid{grid-template-columns:1fr} }
+
+    .card{
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .card h2{margin:0 0 6px 0; font-size:15px; font-weight:900}
+    .muted{color:var(--muted); font-size:12px; line-height:1.5}
+
+    .tilelist{display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-top:10px}
+    @media (max-width: 520px){ .tilelist{grid-template-columns:1fr} }
+
+    .tile{
+      border:1px solid var(--line2);
+      background: rgba(255,255,255,.03);
+      border-radius: 16px;
+      padding: 12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height: 120px;
+    }
+    .tile .title{font-weight:900}
+    .tile .desc{font-size:12px; color:var(--muted); line-height:1.45}
+    .tile .actions{margin-top:auto; display:flex; gap:8px; flex-wrap:wrap}
+
+    .pill{font-size:12px; padding:4px 10px; border-radius:999px; border:1px solid var(--line2); color:var(--muted); background: rgba(255,255,255,.03); white-space:nowrap}
+    .pill.ok{border-color: rgba(44,229,155,.35); color:#bff7df}
+
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .input{
+      width:100%;
+      min-height:44px;
+      padding:10px 12px;
+      border-radius: 12px;
+      border:1px solid var(--line2);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      outline:none;
+      font-size:14px;
+    }
+
+    .foot{margin-top:auto; padding:10px 2px; color:var(--muted); font-size:12px}
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, monospace; padding:2px 6px; border:1px solid var(--line2); border-bottom-width:2px; border-radius:8px; background:rgba(255,255,255,.03)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>ナンプレ支援ツール</h1>
+        <div class="sub">スマホ対応 / ローカル保存 / オフラインOK（PWA）</div>
+      </div>
+      <div class="row">
+        <a class="btn small" href="NumberPlace.html">開く</a>
+        <button class="btn small primary" id="btnInstall" style="display:none">ホーム画面に追加</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>ツール</h2>
+        <div class="muted">このページは“入口”です。UIは <span class="kbd">NumberPlace.html</span> と同じ配色・角丸・ボタン感で統一しています。</div>
+
+        <div class="tilelist">
+          <div class="tile">
+            <div class="row" style="justify-content:space-between">
+              <div class="title">ナンプレ支援（本体）</div>
+              <span class="pill ok">推奨</span>
+            </div>
+            <div class="desc">盤面入力、メモ、候補、自動保存、Undo/Redo、1000スロット管理。</div>
+            <div class="actions">
+              <a class="btn primary" href="NumberPlace.html">起動する</a>
+              <a class="btn" href="#how">使い方</a>
+            </div>
+          </div>
+
+          <div class="tile">
+            <div class="title">クイックジャンプ</div>
+            <div class="desc">問題番号へ直接移動（#042 など）。※本体の一覧にも同機能があります。</div>
+            <div class="row">
+              <input class="input" id="jump" placeholder="例: 42" inputmode="numeric" />
+              <a class="btn good" id="jumpGo" href="NumberPlace.html">移動</a>
+            </div>
+            <div class="muted">※リンクで <span class="kbd">?slot=42</span> を付けて開きます。</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card" id="how">
+        <h2>スマホでの使い方</h2>
+        <div class="muted">
+          <div style="margin:6px 0"><b>Android (Chrome)</b>: メニュー →「ホーム画面に追加」</div>
+          <div style="margin:6px 0"><b>iPhone (Safari)</b>: 共有 →「ホーム画面に追加」</div>
+          <div style="margin:6px 0">PWAとして追加すると、アプリのように全画面で動きます。</div>
+        </div>
+        <div class="divider" style="height:1px;background:var(--line);margin:10px 0"></div>
+        <div class="muted">
+          <b>ショートカット</b><br>
+          <span class="kbd">1〜9</span> 入力 / <span class="kbd">Del</span> 消去 / <span class="kbd">M</span> メモ / <span class="kbd">A</span> 自動候補 / <span class="kbd">G</span> 固定編集
+        </div>
+        <div class="divider" style="height:1px;background:var(--line);margin:10px 0"></div>
+        <div class="muted"><b>保存</b>: ブラウザのローカルストレージに自動保存されます（端末ごと）。</div>
+      </aside>
+    </div>
+
+    <footer class="foot">
+      <div>Tips: 同じフォルダに置けば、この <span class="kbd">index.html</span> を開くだけでスマホ/PCどちらでも入口になります。</div>
+    </footer>
+  </div>
+
+  <script>
+    // Quick jump link builder
+    const jump = document.getElementById('jump');
+    const jumpGo = document.getElementById('jumpGo');
+    function updateJump(){
+      const n = Number((jump.value||'').trim());
+      if(Number.isFinite(n) && n>0){
+        jumpGo.href = 'NumberPlace.html?slot=' + encodeURIComponent(n);
+      }else{
+        jumpGo.href = 'NumberPlace.html';
+      }
+    }
+    jump.addEventListener('input', updateJump);
+    updateJump();
+
+    // PWA install prompt (mostly Android/Chrome)
+    let deferredPrompt = null;
+    const btnInstall = document.getElementById('btnInstall');
+    window.addEventListener('beforeinstallprompt', (e)=>{
+      e.preventDefault();
+      deferredPrompt = e;
+      btnInstall.style.display = 'inline-flex';
+    });
+    btnInstall.addEventListener('click', async ()=>{
+      if(!deferredPrompt) return;
+      deferredPrompt.prompt();
+      try{ await deferredPrompt.userChoice; }catch{}
+      deferredPrompt = null;
+      btnInstall.style.display = 'none';
+    });
+
+    // Service worker
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>
