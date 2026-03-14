@@ -1,0 +1,1497 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>ナンプレ支援（スマホUI / 1000スロット / Undo・Redo）</title>
+<style>
+  :root{
+    --bg:#0b0f17;
+    --text:#e8eefc;
+    --muted:#9fb0d0;
+    --line:rgba(255,255,255,.10);
+    --line2:rgba(255,255,255,.18);
+    --accent:#5aa7ff;
+    --danger:#ff6b6b;
+    --warn:#ffd166;
+    --ok:#2ce59b;
+
+    --cell: clamp(34px, 9.3vw, 52px);
+    --gap: 0px;
+    --radius: 14px;
+
+    --tap: 48px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background: radial-gradient(1200px 700px at 70% -10%, rgba(90,167,255,.25), transparent 55%),
+                radial-gradient(1000px 800px at -10% 10%, rgba(44,229,155,.16), transparent 55%),
+                var(--bg);
+    color:var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x:hidden;
+  }
+
+  .app{
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    gap:10px;
+  }
+
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+    border-radius: var(--radius);
+    position:sticky;
+    top:0;
+    backdrop-filter: blur(8px);
+    z-index:10;
+  }
+
+  .top-left{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    min-width: 0;
+  }
+
+  .slotline{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .slot-id{
+    font-weight:800;
+    letter-spacing:.3px;
+  }
+  .badge{
+    font-size:12px;
+    padding:3px 8px;
+    border-radius:999px;
+    border:1px solid var(--line2);
+    color:var(--muted);
+    background: rgba(255,255,255,.03);
+  }
+  .badge.ok{border-color: rgba(44,229,155,.35); color:#bff7df}
+  .badge.warn{border-color: rgba(255,209,102,.35); color:#fff2c8}
+  .badge.danger{border-color: rgba(255,107,107,.35); color:#ffd2d2}
+
+  .statusline{
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-width:0;
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    background: var(--muted);
+    opacity:.7;
+  }
+  .dot.saving{background: var(--warn); opacity:1}
+  .dot.saved{background: var(--ok); opacity:1}
+  .dot.err{background: var(--danger); opacity:1}
+
+  .top-actions{
+    display:flex;
+    gap:8px;
+  }
+  .btn{
+    min-height: var(--tap);
+    padding: 10px 12px;
+    border-radius: 12px;
+    border:1px solid var(--line2);
+    background: rgba(255,255,255,.04);
+    color: var(--text);
+    font-weight:700;
+    cursor:pointer;
+    user-select:none;
+    -webkit-tap-highlight-color: transparent;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .btn:active{transform: translateY(1px)}
+  .btn.primary{
+    border-color: rgba(90,167,255,.45);
+    background: rgba(90,167,255,.14);
+  }
+  .btn.ghost{ background: transparent; }
+  .btn.small{
+    min-height:40px;
+    padding:8px 10px;
+    font-size:13px;
+    border-radius: 11px;
+  }
+
+  /* 行・列・ブロック未使用数字 */
+  .rcbar{
+    width:100%;
+    border:1px solid var(--line);
+    background: rgba(255,255,255,.03);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    flex-wrap:wrap;
+    text-align:center;
+  }
+  .rcbar b{ color: rgba(232,238,252,.92); font-weight:800; }
+  .rcbar .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(232,238,252,.88); }
+
+  /* 盤面 */
+  .main{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    align-items:center;
+  }
+
+  .board-wrap{
+    width: calc(var(--cell) * 9);
+    max-width: 100%;
+  }
+
+  .board{
+    width:100%;
+    display:grid;
+    grid-template-columns: repeat(9, var(--cell));
+    grid-auto-rows: var(--cell);
+    gap: var(--gap);
+    border-radius: 16px;
+    overflow:hidden;
+    border: 2px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.03);
+  }
+
+  .cell{
+    position:relative;
+    border:1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.02);
+    user-select:none;
+  }
+  .cell[data-c="0"]{ border-left-width:2px; border-left-color: rgba(255,255,255,.22); }
+  .cell[data-r="0"]{ border-top-width:2px; border-top-color: rgba(255,255,255,.22); }
+  .cell[data-c="2"], .cell[data-c="5"], .cell[data-c="8"]{ border-right-width:2px; border-right-color: rgba(255,255,255,.22); }
+  .cell[data-r="2"], .cell[data-r="5"], .cell[data-r="8"]{ border-bottom-width:2px; border-bottom-color: rgba(255,255,255,.22); }
+
+  .cell.sel{
+    outline: 3px solid rgba(90,167,255,.95);
+    outline-offset:-3px;
+    z-index:2;
+  }
+  .cell.peer{ background: rgba(90,167,255,.10); }
+  .cell.same{ background: rgba(255,209,102,.16); }
+  .cell.single{ background: rgba(44,229,155,.12); }
+
+  /* 固定マス：薄緑 */
+  .cell.given{
+    background: rgba(44, 229, 155, 0.22);
+  }
+  .val.given{
+    color: #eafff5;
+    font-weight: 900;
+  }
+
+  /* 矛盾は赤優先 */
+  .cell.conflict{ background: rgba(255,107,107,.18); }
+  .cell.given.conflict{ background: rgba(255,107,107,.22); }
+
+  .val{
+    position:absolute; inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: clamp(16px, 4.5vw, 22px);
+    font-weight: 800;
+    letter-spacing: .3px;
+  }
+
+
+.notes{
+  position:absolute;
+  inset:5px;              /* 少し余白を増やす */
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 0px;               /* 詰まりすぎ防止 */
+  pointer-events:none;
+  font-size: 8px;         /* ★ ここがメイン：10 → 8 */
+  line-height: 1;         /* 行間を安定 */
+  color: rgba(232,238,252,.68);
+}
+
+
+.note{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity:.16;            /* 少し控えめに */
+}
+
+  .note.on{ opacity:1; }
+  .note.memo{ color: rgba(90,167,255,.95); font-weight:700; }
+  .note.bad{ color: rgba(255,107,107,.95); font-weight:800; }
+
+  /* 下部パネル */
+  .bottom{
+    margin-top:auto;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    border:1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+    border-radius: var(--radius);
+    padding: 10px;
+  }
+
+  .modebar{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:center;
+  }
+
+  .toggles{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  .toggle.on{
+    border-color: rgba(90,167,255,.55);
+    background: rgba(90,167,255,.16);
+  }
+  .toggle.good.on{
+    border-color: rgba(44,229,155,.55);
+    background: rgba(44,229,155,.14);
+  }
+  .toggle.warn.on{
+    border-color: rgba(255,209,102,.55);
+    background: rgba(255,209,102,.14);
+  }
+
+  .keypad{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .key{
+    min-height: 52px;
+    border-radius: 14px;
+    border:1px solid var(--line2);
+    background: rgba(255,255,255,.04);
+    color: var(--text);
+    font-weight: 900;
+    font-size: 18px;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .key:active{ transform: translateY(1px); }
+  .key.secondary{
+    font-weight:800;
+    font-size:14px;
+    color: rgba(232,238,252,.92);
+    background: rgba(255,255,255,.03);
+  }
+  .key.wide{ grid-column: span 3; }
+
+  /* 数字＋残数 */
+  .key.digit{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:2px;
+  }
+  .key .kNum{ font-size:18px; font-weight:900; line-height:1; }
+  .key .kRem{ font-size:11px; font-weight:800; color: rgba(232,238,252,.70); line-height:1; }
+
+  .key.depleted{
+    opacity:.35;
+    filter: grayscale(0.2);
+  }
+  .key.depleted .kRem{ color: rgba(255,255,255,.55); }
+
+  .key.overfull{
+    opacity: .55;
+    border-color: rgba(255,107,107,.55);
+    background: rgba(255,107,107,.10);
+  }
+  .key.overfull .kRem{ color: rgba(255,107,107,.95); }
+
+  .key:disabled{ cursor:not-allowed; }
+
+  /* モーダル */
+  .modal{
+    position:fixed;
+    inset:0;
+    background: rgba(0,0,0,.55);
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    z-index:50;
+  }
+  .modal.open{ display:flex; }
+  .sheet{
+    width:min(560px, 100%);
+    max-height: 85vh;
+    border-radius: 18px;
+    border:1px solid var(--line2);
+    background: rgba(18,26,38,.96);
+    backdrop-filter: blur(10px);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .sheet-head{
+    padding: 12px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .sheet-title{ font-weight:900; letter-spacing:.2px; }
+  .sheet-body{
+    padding: 12px 14px;
+    overflow:auto;
+  }
+  .row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .input{
+    width:100%;
+    min-height:44px;
+    padding:10px 12px;
+    border-radius: 12px;
+    border:1px solid var(--line2);
+    background: rgba(0,0,0,.18);
+    color: var(--text);
+    outline:none;
+    font-size:14px;
+  }
+  .help{
+    font-size:12px;
+    color: var(--muted);
+    line-height:1.45;
+  }
+
+  .slotlist{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top: 10px;
+  }
+  .slotitem{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding: 12px 12px;
+    border:1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255,255,255,.03);
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+    min-height: var(--tap);
+  }
+  .slotitem:active{ transform: translateY(1px); }
+  .slotmeta{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    min-width:0;
+  }
+  .slotmeta .name{
+    font-weight:900;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .slotmeta .sub{
+    font-size:12px;
+    color: var(--muted);
+  }
+
+  .pill{
+    font-size:12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border:1px solid var(--line2);
+    color: var(--muted);
+    background: rgba(255,255,255,.03);
+    white-space:nowrap;
+  }
+  .pill.ok{ border-color: rgba(44,229,155,.35); color:#bff7df; }
+  .pill.warn{ border-color: rgba(255,209,102,.35); color:#fff2c8; }
+  .pill.danger{ border-color: rgba(255,107,107,.35); color:#ffd2d2; }
+
+  .divider{height:1px;background:var(--line);margin:10px 0}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="top-left">
+      <div class="slotline">
+        <div class="slot-id" id="slotLabel">問題 #001</div>
+        <div class="badge" id="progressBadge">解きかけ</div>
+      </div>
+      <div class="statusline">
+        <span class="dot saved" id="saveDot"></span>
+        <span id="saveText">保存済み</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn ghost" id="btnSlots" title="問題一覧">一覧</button>
+      <button class="btn primary" id="btnNew" title="新しい問題">新規</button>
+      <button class="btn" id="btnMore" title="その他">…</button>
+    </div>
+  </div>
+
+  <div class="rcbar" id="rcBar">
+    <b>行</b><span class="mono" id="missRow">-</span>
+    <b>列</b><span class="mono" id="missCol">-</span>
+    <b>3×3</b><span class="mono" id="missBox">-</span>
+  </div>
+
+  <div class="main">
+    <div class="board-wrap">
+      <div class="board" id="board"></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="modebar">
+      <div class="toggles">
+        <button class="btn small toggle" id="tgMemo">メモ: OFF</button>
+        <button class="btn small toggle good on" id="tgAuto">自動候補: ON</button>
+      </div>
+      <div class="toggles">
+        <button class="btn small toggle warn" id="tgGiven">固定編集: OFF</button>
+      </div>
+    </div>
+
+    <div class="keypad" id="keypad">
+      <button class="key digit" data-n="1"><div class="kNum">1</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="2"><div class="kNum">2</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="3"><div class="kNum">3</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="4"><div class="kNum">4</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="5"><div class="kNum">5</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="6"><div class="kNum">6</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="7"><div class="kNum">7</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="8"><div class="kNum">8</div><div class="kRem">残:9</div></button>
+      <button class="key digit" data-n="9"><div class="kNum">9</div><div class="kRem">残:9</div></button>
+
+      <button class="key secondary" id="btnUndo">Undo</button>
+      <button class="key secondary" id="btnRedo">Redo</button>
+      <button class="key secondary" id="btnErase">消す（値/メモ）</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Slots -->
+<div class="modal" id="modalSlots" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title">問題一覧（最大1000）</div>
+      <button class="btn small" data-close="modalSlots">閉じる</button>
+    </div>
+    <div class="sheet-body">
+      <div class="row">
+        <input class="input" id="jumpInput" placeholder="ジャンプ：例 42（#042へ）" inputmode="numeric" />
+        <button class="btn small" id="btnJump">移動</button>
+      </div>
+      <div class="help" style="margin-top:6px;">
+        ・切替は誤タップ防止のため確認が出ます（設定でOFF可）<br/>
+        ・一覧は「最近更新順」を優先表示します（全件も見られます）<br/>
+        ・削除は誤操作防止のため<strong>長押し</strong>です
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <button class="btn small primary" id="btnCreateSlot">＋ 新しい問題を作る</button>
+        <button class="btn small" id="btnShowAll">全件表示</button>
+      </div>
+
+      <div class="slotlist" id="slotList"></div>
+
+      <div class="divider"></div>
+      <button class="btn small" id="btnLoadMore" style="width:100%;">さらに表示</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: More (設定のみ / 盤面入出力は削除) -->
+<div class="modal" id="modalMore" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title">その他</div>
+      <button class="btn small" data-close="modalMore">閉じる</button>
+    </div>
+    <div class="sheet-body">
+      <div>
+        <div class="badge" style="display:inline-block;margin-bottom:8px;">設定</div>
+        <div class="row" style="margin-bottom:8px;">
+          <button class="btn small toggle on" id="tgConfirm">切替確認: ON</button>
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button class="btn small" id="btnResetCurrent">この問題を空にする</button>
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button class="btn small" id="btnClearUndo">Undo/Redo履歴を消す</button>
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button class="btn small" id="btnClearSave" style="border-color: rgba(255,107,107,.45); background: rgba(255,107,107,.12);">全データ初期化</button>
+        </div>
+        <div class="help">
+          ・Undo/Redoは「入力/消去/メモ/固定トグル/この問題を空にする」を戻せます。<br/>
+          ・スロット切替/新規作成は別操作扱いでUndo/Redo履歴はリセットします。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const KEY_INDEX  = 'sudoku:index:v5';
+  const KEY_PREFS  = 'sudoku:prefs:v5';
+  const slotKey = (id) => `sudoku:slot:${id}:v5`;
+
+  const MAX_SLOTS = 1000;
+  const FULL = 0x1FF;
+
+  const boardEl = document.getElementById('board');
+
+  const slotLabel = document.getElementById('slotLabel');
+  const progressBadge = document.getElementById('progressBadge');
+  const saveDot = document.getElementById('saveDot');
+  const saveText = document.getElementById('saveText');
+
+  const btnSlots = document.getElementById('btnSlots');
+  const btnNew   = document.getElementById('btnNew');
+  const btnMore  = document.getElementById('btnMore');
+
+  const tgMemo  = document.getElementById('tgMemo');
+  const tgAuto  = document.getElementById('tgAuto');
+  const tgGiven = document.getElementById('tgGiven');
+
+  const btnUndo  = document.getElementById('btnUndo');
+  const btnRedo  = document.getElementById('btnRedo');
+  const btnErase = document.getElementById('btnErase');
+
+  const modalSlots = document.getElementById('modalSlots');
+  const modalMore  = document.getElementById('modalMore');
+
+  const slotList = document.getElementById('slotList');
+  const btnLoadMore = document.getElementById('btnLoadMore');
+  const btnShowAll = document.getElementById('btnShowAll');
+  const btnCreateSlot = document.getElementById('btnCreateSlot');
+
+  const jumpInput = document.getElementById('jumpInput');
+  const btnJump = document.getElementById('btnJump');
+
+  const tgConfirm = document.getElementById('tgConfirm');
+  const btnClearSave = document.getElementById('btnClearSave');
+  const btnResetCurrent = document.getElementById('btnResetCurrent');
+  const btnClearUndo = document.getElementById('btnClearUndo');
+
+  const missRowEl = document.getElementById('missRow');
+  const missColEl = document.getElementById('missCol');
+  const missBoxEl = document.getElementById('missBox');
+
+  // Board state
+  let values = Array.from({length:9}, ()=>Array(9).fill(0));
+  let givens = Array.from({length:9}, ()=>Array(9).fill(false));
+  let memos  = Array.from({length:9}, ()=>Array(9).fill(0));
+  let sel = {r:0,c:0};
+
+  // UI state
+  let memoMode = false;
+  let autoCand = true;
+  let givenEdit = false;
+
+  // Slots
+  let index = {};
+  
+let currentSlotId = "0001";
+// Allow deep-link: NumberPlace.html?slot=42
+try{
+  const sp = new URLSearchParams(location.search);
+  const n = Number(sp.get('slot'));
+  if(Number.isFinite(n) && n>=1 && n<=MAX_SLOTS){
+    currentSlotId = String(n).padStart(4,'0');
+  }
+}catch(e){}
+
+
+  let listMode = "recent";
+  let listPage = 0;
+  const PAGE_SIZE = 40;
+
+  // Prefs
+  let confirmSwitch = true;
+
+  // Save
+  let saveTimer = null;
+
+  // Undo/Redo stacks
+  const undoStack = [];
+  const redoStack = [];
+  const UNDO_LIMIT = 300;
+  let isRestoring = false;
+
+  const pad4 = (n) => String(n).padStart(4,'0');
+  const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+  const boxIndex = (r,c)=>Math.floor(r/3)*3+Math.floor(c/3);
+  const idx = (r,c)=>r*9+c;
+
+  function deepCopy2D(a){ return a.map(row => row.slice()); }
+  function snapshotState(){
+    return {
+      values: deepCopy2D(values),
+      memos:  deepCopy2D(memos),
+      givens: deepCopy2D(givens),
+      sel: {r: sel.r, c: sel.c}
+    };
+  }
+  function restoreState(s){
+    values = deepCopy2D(s.values);
+    memos  = deepCopy2D(s.memos);
+    givens = deepCopy2D(s.givens);
+    sel = {r: s.sel.r, c: s.sel.c};
+  }
+
+  function updateHistoryButtons(){
+    btnUndo.disabled = undoStack.length === 0;
+    btnRedo.disabled = redoStack.length === 0;
+    btnUndo.textContent = undoStack.length ? `Undo (${undoStack.length})` : 'Undo';
+    btnRedo.textContent = redoStack.length ? `Redo (${redoStack.length})` : 'Redo';
+  }
+
+  function pushUndo(action){
+    if(isRestoring) return;
+    undoStack.push(action);
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack.length = 0; // 新操作でredoは消える（一般的）[1](https://www.geeksforgeeks.org/projects/implement-undo-and-redo-features-of-a-text-editor/)
+    updateHistoryButtons();
+  }
+
+  function pushRedo(action){
+    if(isRestoring) return;
+    redoStack.push(action);
+    if(redoStack.length > UNDO_LIMIT) redoStack.shift();
+    updateHistoryButtons();
+  }
+
+  function doUndo(){
+    if(undoStack.length === 0) return;
+    const a = undoStack.pop();
+    isRestoring = true;
+    try{
+      if(a.kind === 'cell'){
+        const {r,c,prev,next} = a;
+        // undo: prevへ
+        values[r][c] = prev.v;
+        memos[r][c]  = prev.m;
+        givens[r][c] = prev.g;
+        sel = {r,c};
+        // redo用（逆）を積む
+        redoStack.push({kind:'cell', r,c, prev: prev, next: next});
+      }else if(a.kind === 'snapshot'){
+        // undo: prevへ
+        restoreState(a.prev);
+        redoStack.push({kind:'snapshot', prev: a.prev, next: a.next});
+      }
+    } finally {
+      isRestoring = false;
+    }
+    queueSave();
+    refresh();
+    updateHistoryButtons();
+  }
+
+  function doRedo(){
+    if(redoStack.length === 0) return;
+    const a = redoStack.pop();
+    isRestoring = true;
+    try{
+      if(a.kind === 'cell'){
+        const {r,c,prev,next} = a;
+        // redo: nextへ
+        values[r][c] = next.v;
+        memos[r][c]  = next.m;
+        givens[r][c] = next.g;
+        sel = {r,c};
+        // undo用（同じaction）を戻す
+        undoStack.push({kind:'cell', r,c, prev: prev, next: next});
+      }else if(a.kind === 'snapshot'){
+        // redo: nextへ
+        restoreState(a.next);
+        undoStack.push({kind:'snapshot', prev: a.prev, next: a.next});
+      }
+    } finally {
+      isRestoring = false;
+    }
+    queueSave();
+    refresh();
+    updateHistoryButtons();
+  }
+
+  function clearHistory(){
+    undoStack.length = 0;
+    redoStack.length = 0;
+    updateHistoryButtons();
+  }
+
+  function setSaveIndicator(mode){
+    saveDot.classList.remove('saving','saved','err');
+    if(mode==='saving'){
+      saveDot.classList.add('saving');
+      saveText.textContent = '保存中…';
+    }else if(mode==='saved'){
+      saveDot.classList.add('saved');
+      saveText.textContent = '保存済み';
+    }else{
+      saveDot.classList.add('err');
+      saveText.textContent = '保存失敗（容量/設定を確認）';
+    }
+  }
+
+  function buildMasks(){
+    const rowMask = Array(9).fill(0);
+    const colMask = Array(9).fill(0);
+    const boxMask = Array(9).fill(0);
+    for(let r=0;r<9;r++){
+      for(let c=0;c<9;c++){
+        const v = values[r][c];
+        if(v>=1 && v<=9){
+          const bit = 1<<(v-1);
+          rowMask[r] |= bit;
+          colMask[c] |= bit;
+          boxMask[boxIndex(r,c)] |= bit;
+        }
+      }
+    }
+    return {rowMask, colMask, boxMask};
+  }
+
+  function allowedMask(r,c, masks){
+    if(values[r][c]!==0) return 0;
+    const used = masks.rowMask[r] | masks.colMask[c] | masks.boxMask[boxIndex(r,c)];
+    return FULL & ~used;
+  }
+
+  function maskToSpaced(mask){
+    let out=[];
+    for(let n=1;n<=9;n++) if(mask & (1<<(n-1))) out.push(n);
+    return out.length ? out.join(' ') : 'なし';
+  }
+
+  function findConflicts(){
+    const conflict = Array.from({length:9},()=>Array(9).fill(false));
+    const markGroup = (coords) => {
+      const map = new Map();
+      for(const [r,c] of coords){
+        const v = values[r][c];
+        if(v===0) continue;
+        if(!map.has(v)) map.set(v, []);
+        map.get(v).push([r,c]);
+      }
+      for(const list of map.values()){
+        if(list.length>=2) for(const [r,c] of list) conflict[r][c]=true;
+      }
+    };
+    for(let r=0;r<9;r++) markGroup(Array.from({length:9},(_,c)=>[r,c]));
+    for(let c=0;c<9;c++) markGroup(Array.from({length:9},(_,r)=>[r,c]));
+    for(let br=0;br<3;br++){
+      for(let bc=0;bc<3;bc++){
+        const coords=[];
+        for(let r=br*3;r<br*3+3;r++) for(let c=bc*3;c<bc*3+3;c++) coords.push([r,c]);
+        markGroup(coords);
+      }
+    }
+    return conflict;
+  }
+
+  function computeProgress(){
+    let filled=0;
+    for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(values[r][c]!==0) filled++;
+    const conflicts = findConflicts();
+    let hasConflict=false;
+    for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(conflicts[r][c]) hasConflict=true;
+
+    let status = 'empty';
+    if(filled===0) status='empty';
+    else if(filled===81 && !hasConflict) status='complete';
+    else if(hasConflict) status='conflict';
+    else status='progress';
+
+    return {filled, status, hasConflict};
+  }
+
+  function badgeFor(status){
+    if(status==='complete') return {text:'完了', cls:'ok'};
+    if(status==='conflict') return {text:'矛盾あり', cls:'danger'};
+    if(status==='empty') return {text:'未入力', cls:''};
+    return {text:'解きかけ', cls:'warn'};
+  }
+
+  // keypad remaining
+  function countDigitsOnBoard(){
+    const counts = Array(10).fill(0);
+    for(let r=0;r<9;r++) for(let c=0;c<9;c++){
+      const v = values[r][c];
+      if(v>=1 && v<=9) counts[v]++;
+    }
+    return counts;
+  }
+  function updateKeypadCounts(){
+    const counts = countDigitsOnBoard();
+    for(let n=1;n<=9;n++){
+      const btn = document.querySelector(`.keypad .key[data-n="${n}"]`);
+      if(!btn) continue;
+
+      const used = counts[n];
+      const remRaw = 9 - used;
+      const rem = Math.max(0, remRaw);
+
+      btn.innerHTML = `<div class="kNum">${n}</div><div class="kRem">${remRaw < 0 ? '超過' : '残:' + rem}</div>`;
+      btn.classList.add('digit');
+
+      const depleted = (used >= 9);
+      const overfull = (used > 9);
+      btn.classList.toggle('depleted', depleted && !overfull);
+      btn.classList.toggle('overfull', overfull);
+
+      btn.disabled = depleted; // 9個以上なら押せない
+      btn.setAttribute('aria-disabled', depleted ? 'true' : 'false');
+    }
+  }
+
+  // Render board
+  const cells = [];
+  function initBoardUI(){
+    boardEl.innerHTML='';
+    cells.length=0;
+    for(let r=0;r<9;r++){
+      for(let c=0;c<9;c++){
+        const cell = document.createElement('div');
+        cell.className='cell';
+        cell.dataset.r=r;
+        cell.dataset.c=c;
+
+        const valEl = document.createElement('div');
+        valEl.className='val';
+
+        const notesEl = document.createElement('div');
+        notesEl.className='notes';
+
+        const spans=[];
+        for(let n=1;n<=9;n++){
+          const sp = document.createElement('div');
+          sp.className='note';
+          sp.textContent=n;
+          notesEl.appendChild(sp);
+          spans.push(sp);
+        }
+
+        cell.appendChild(valEl);
+        cell.appendChild(notesEl);
+        boardEl.appendChild(cell);
+
+        cell.addEventListener('click', ()=>{
+          sel={r,c};
+          if(givenEdit && values[r][c]!==0){
+            const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+            givens[r][c] = !givens[r][c];
+            const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+            pushUndo({kind:'cell', r,c, prev, next});
+            queueSave();
+          }
+          refresh();
+        });
+
+        cells.push({cell,valEl,notesEl,spans});
+      }
+    }
+  }
+
+  function refresh(){
+    const masks = buildMasks();
+    const conflict = findConflicts();
+    const selV = values[sel.r][sel.c];
+    const selB = boxIndex(sel.r, sel.c);
+
+    const p = computeProgress();
+    const b = badgeFor(p.status);
+    progressBadge.textContent = b.text;
+    progressBadge.className = 'badge ' + (b.cls || '');
+    slotLabel.textContent = `問題 #${Number(currentSlotId)}`;
+
+    missRowEl.textContent = maskToSpaced(FULL & ~masks.rowMask[sel.r]);
+    missColEl.textContent = maskToSpaced(FULL & ~masks.colMask[sel.c]);
+    missBoxEl.textContent = maskToSpaced(FULL & ~masks.boxMask[selB]);
+
+    for(let r=0;r<9;r++){
+      for(let c=0;c<9;c++){
+        const o = cells[idx(r,c)];
+        const cell = o.cell;
+        const v = values[r][c];
+
+        cell.className = 'cell';
+        if(r===sel.r && c===sel.c) cell.classList.add('sel');
+        if(r===sel.r || c===sel.c || boxIndex(r,c)===selB) cell.classList.add('peer');
+        if(selV!==0 && v===selV) cell.classList.add('same');
+        if(conflict[r][c]) cell.classList.add('conflict');
+        if(givens[r][c]) cell.classList.add('given');
+
+        o.valEl.textContent = v===0 ? '' : String(v);
+        o.valEl.classList.toggle('given', givens[r][c]);
+
+        if(v!==0){
+          o.notesEl.style.display='none';
+          continue;
+        }
+        o.notesEl.style.display='grid';
+
+        const auto = autoCand ? allowedMask(r,c,masks) : 0;
+        const memo = memos[r][c];
+        const show = memo ? memo : auto;
+        const badMemo = memo & ~auto;
+
+        if(autoCand && auto!==0 && (auto & (auto-1))===0){
+          cell.classList.add('single');
+        }
+
+        for(let n=1;n<=9;n++){
+          const bit = 1<<(n-1);
+          const sp = o.spans[n-1];
+          sp.className = 'note';
+          if(show & bit) sp.classList.add('on');
+          if(memo & bit) sp.classList.add('memo');
+          if(badMemo & bit) sp.classList.add('bad');
+        }
+      }
+    }
+
+    updateKeypadCounts();
+    updateHistoryButtons();
+  }
+
+  // Core edits with undo
+  function setValue(r,c,n){
+    if(givens[r][c]) return false;
+    const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+    values[r][c]=n;
+    if(n!==0) memos[r][c]=0;
+    const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+    if(prev.v===next.v && prev.m===next.m && prev.g===next.g) return false;
+    pushUndo({kind:'cell', r,c, prev, next});
+    return true;
+  }
+
+  function toggleMemo(r,c,n){
+    if(givens[r][c]) return false;
+    if(values[r][c]!==0) return false;
+    const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+    memos[r][c] ^= (1<<(n-1));
+    const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+    pushUndo({kind:'cell', r,c, prev, next});
+    return true;
+  }
+
+  function inputDigit(n){
+    const {r,c}=sel;
+
+    if(givenEdit && values[r][c]!==0){
+      const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+      givens[r][c] = !givens[r][c];
+      const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+      pushUndo({kind:'cell', r,c, prev, next});
+      queueSave();
+      refresh();
+      return;
+    }
+
+    const changed = memoMode ? toggleMemo(r,c,n) : setValue(r,c,n);
+    if(changed){
+      queueSave();
+      refresh();
+    }
+  }
+
+  function erase(){
+    const {r,c}=sel;
+    if(givens[r][c]) return;
+
+    if(memoMode){
+      const prev = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+      memos[r][c]=0;
+      const next = {v: values[r][c], m: memos[r][c], g: givens[r][c]};
+      if(prev.m!==next.m){
+        pushUndo({kind:'cell', r,c, prev, next});
+        queueSave();
+        refresh();
+      }
+    }else{
+      const changed = setValue(r,c,0);
+      if(changed){
+        queueSave();
+        refresh();
+      }
+    }
+  }
+
+  // Modals
+  function openModal(el){ el.classList.add('open'); }
+  function closeModal(el){ el.classList.remove('open'); }
+
+  document.querySelectorAll('[data-close]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-close');
+      closeModal(document.getElementById(id));
+    });
+  });
+  [modalSlots, modalMore].forEach(m=>{
+    m.addEventListener('click', (e)=>{
+      if(e.target === m) closeModal(m);
+    });
+  });
+
+  // Storage
+  function loadPrefs(){
+    try{
+      const raw = localStorage.getItem(KEY_PREFS);
+      if(!raw) return;
+      const p = JSON.parse(raw);
+      confirmSwitch = !!p.confirmSwitch;
+    }catch{}
+  }
+  function savePrefs(){
+    try{ localStorage.setItem(KEY_PREFS, JSON.stringify({confirmSwitch})); }catch{}
+  }
+
+  function loadIndex(){
+    try{
+      const raw = localStorage.getItem(KEY_INDEX);
+      index = raw ? JSON.parse(raw) : {};
+    }catch{
+      index = {};
+    }
+  }
+  function saveIndex(){
+    localStorage.setItem(KEY_INDEX, JSON.stringify(index));
+  }
+
+  function emptyState(){
+    values = Array.from({length:9}, ()=>Array(9).fill(0));
+    givens = Array.from({length:9}, ()=>Array(9).fill(false));
+    memos  = Array.from({length:9}, ()=>Array(9).fill(0));
+    sel = {r:0,c:0};
+  }
+
+  function loadSlot(id){
+    try{
+      const raw = localStorage.getItem(slotKey(id));
+      if(!raw){
+        emptyState();
+        return false;
+      }
+      const data = JSON.parse(raw);
+      values = data.values || values;
+      memos  = data.memos  || memos;
+      givens = data.givens || givens;
+      sel = data.sel || {r:0,c:0};
+      return true;
+    }catch{
+      emptyState();
+      return false;
+    }
+  }
+
+  function saveSlotNow(){
+    try{
+      const p = computeProgress();
+      const data = { values, memos, givens, sel, updated: Date.now() };
+      localStorage.setItem(slotKey(currentSlotId), JSON.stringify(data));
+      index[currentSlotId] = { updated: data.updated, status: p.status, filled: p.filled };
+      saveIndex();
+      setSaveIndicator('saved');
+      return true;
+    }catch(e){
+      setSaveIndicator('err');
+      return false;
+    }
+  }
+
+  function queueSave(){
+    setSaveIndicator('saving');
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=> saveSlotNow(), 200);
+  }
+
+  function findNextFreeSlot(){
+    for(let i=1;i<=MAX_SLOTS;i++){
+      const id = String(i).padStart(4,'0');
+      if(!index[id] && !localStorage.getItem(slotKey(id))) return id;
+    }
+    return null;
+  }
+
+  function switchToSlot(id){
+    const num = Number(id);
+    if(!(num>=1 && num<=MAX_SLOTS)) return;
+
+    const doSwitch = ()=>{
+      currentSlotId = id;
+      loadSlot(id);
+      if(!index[id]){
+        index[id] = {updated: Date.now(), status:'empty', filled:0};
+        saveIndex();
+      }
+      setSaveIndicator('saved');
+      clearHistory(); // スロット切替はUndo/Redoリセット
+      refresh();
+    };
+
+    if(confirmSwitch){
+      const ok = confirm(`問題 #${num} を開きますか？\n（現在の内容は自動保存されています）`);
+      if(!ok) return;
+    }
+    doSwitch();
+  }
+
+  // Slots list render
+  function sortedSlotIds(mode){
+    const ids = Object.keys(index);
+    if(mode==='recent'){
+      ids.sort((a,b)=> (index[b].updated||0) - (index[a].updated||0));
+    }else{
+      ids.sort((a,b)=> Number(a) - Number(b));
+    }
+    return ids;
+  }
+
+  function humanStatus(s){
+    if(s==='complete') return '完了';
+    if(s==='conflict') return '矛盾あり';
+    if(s==='empty') return '未入力';
+    return '解きかけ';
+  }
+
+  function pillClass(s){
+    if(s==='complete') return 'pill ok';
+    if(s==='conflict') return 'pill danger';
+    if(s==='empty') return 'pill';
+    return 'pill warn';
+  }
+
+  function renderSlotList(reset=false){
+    if(reset){
+      listPage=0;
+      slotList.innerHTML='';
+    }
+
+    const ids = sortedSlotIds(listMode);
+    const start = listPage * PAGE_SIZE;
+    const end = Math.min(ids.length, start + PAGE_SIZE);
+    const slice = ids.slice(start, end);
+
+    for(const id of slice){
+      const meta = index[id] || {status:'empty', filled:0, updated:0};
+      const item = document.createElement('div');
+      item.className='slotitem';
+
+      const left = document.createElement('div');
+      left.className='slotmeta';
+
+      const name = document.createElement('div');
+      name.className='name';
+      name.textContent = `#${Number(id)}（${meta.filled||0}/81）`;
+
+      const sub = document.createElement('div');
+      sub.className='sub';
+      const dt = meta.updated ? new Date(meta.updated) : null;
+      sub.textContent = dt ? `更新: ${dt.toLocaleString()}` : '未保存';
+
+      left.appendChild(name);
+      left.appendChild(sub);
+
+      const right = document.createElement('div');
+      right.className = pillClass(meta.status);
+      right.textContent = humanStatus(meta.status);
+
+      item.appendChild(left);
+      item.appendChild(right);
+
+      let pressTimer = null;
+      item.addEventListener('pointerdown', ()=>{
+        pressTimer = setTimeout(()=>{
+          const ok = confirm(`問題 #${Number(id)} を削除しますか？（元に戻せません）`);
+          if(ok){
+            localStorage.removeItem(slotKey(id));
+            delete index[id];
+            saveIndex();
+            renderSlotList(true);
+          }
+        }, 600);
+      });
+      item.addEventListener('pointerup', ()=>{ if(pressTimer) clearTimeout(pressTimer); });
+      item.addEventListener('pointerleave', ()=>{ if(pressTimer) clearTimeout(pressTimer); });
+
+      item.addEventListener('click', ()=>{
+        closeModal(modalSlots);
+        switchToSlot(id);
+      });
+
+      slotList.appendChild(item);
+    }
+
+    listPage++;
+    btnLoadMore.disabled = (end >= ids.length);
+    btnLoadMore.textContent = (end >= ids.length) ? 'これ以上ありません' : 'さらに表示';
+  }
+
+  // Buttons/events
+  document.querySelectorAll('.keypad .key[data-n]').forEach(btn=>{
+    btn.addEventListener('click', ()=> inputDigit(Number(btn.dataset.n)));
+  });
+  btnUndo.addEventListener('click', doUndo);
+  btnRedo.addEventListener('click', doRedo);
+  btnErase.addEventListener('click', erase);
+
+  tgMemo.addEventListener('click', ()=>{
+    memoMode = !memoMode;
+    tgMemo.classList.toggle('on', memoMode);
+    tgMemo.textContent = `メモ: ${memoMode ? 'ON' : 'OFF'}`;
+  });
+
+  tgAuto.addEventListener('click', ()=>{
+    autoCand = !autoCand;
+    tgAuto.classList.toggle('on', autoCand);
+    tgAuto.textContent = `自動候補: ${autoCand ? 'ON' : 'OFF'}`;
+    refresh();
+  });
+
+  tgGiven.addEventListener('click', ()=>{
+    givenEdit = !givenEdit;
+    tgGiven.classList.toggle('on', givenEdit);
+    tgGiven.textContent = `固定編集: ${givenEdit ? 'ON' : 'OFF'}`;
+  });
+
+  btnSlots.addEventListener('click', ()=>{
+    listMode="recent"; listPage=0;
+    openModal(modalSlots);
+    renderSlotList(true);
+  });
+
+  btnNew.addEventListener('click', ()=>{
+    const id = findNextFreeSlot();
+    if(!id){
+      alert('1000スロットが埋まっています。不要な問題を長押し削除してください。');
+      return;
+    }
+    currentSlotId = id;
+    emptyState();
+    index[id] = {updated: Date.now(), status:'empty', filled:0};
+    saveIndex();
+    clearHistory();
+    queueSave();
+    refresh();
+  });
+
+  btnMore.addEventListener('click', ()=> openModal(modalMore));
+
+  btnLoadMore.addEventListener('click', ()=> renderSlotList(false));
+  btnShowAll.addEventListener('click', ()=>{
+    listMode = 'all';
+    renderSlotList(true);
+  });
+  btnCreateSlot.addEventListener('click', ()=>{
+    const id = findNextFreeSlot();
+    if(!id){
+      alert('1000スロットが埋まっています。不要な問題を長押し削除してください。');
+      return;
+    }
+    closeModal(modalSlots);
+    currentSlotId = id;
+    emptyState();
+    index[id] = {updated: Date.now(), status:'empty', filled:0};
+    saveIndex();
+    clearHistory();
+    queueSave();
+    refresh();
+  });
+
+  btnJump.addEventListener('click', ()=>{
+    const n = Number((jumpInput.value||'').trim());
+    if(!Number.isFinite(n)) return;
+    const id = pad4(clamp(n,1,MAX_SLOTS));
+    closeModal(modalSlots);
+    switchToSlot(id);
+  });
+
+  tgConfirm.addEventListener('click', ()=>{
+    confirmSwitch = !confirmSwitch;
+    tgConfirm.classList.toggle('on', confirmSwitch);
+    tgConfirm.textContent = `切替確認: ${confirmSwitch ? 'ON' : 'OFF'}`;
+    savePrefs();
+  });
+
+  btnResetCurrent.addEventListener('click', ()=>{
+    const ok = confirm(`問題 #${Number(currentSlotId)} を空にしますか？（このスロットだけ）`);
+    if(!ok) return;
+
+    const before = snapshotState();
+    emptyState();
+    const after = snapshotState();
+    pushUndo({kind:'snapshot', prev: before, next: after});
+
+    queueSave();
+    refresh();
+    alert('この問題を初期化しました（Undoで戻せます）');
+  });
+
+  btnClearUndo.addEventListener('click', ()=>{
+    const ok = confirm('Undo/Redo履歴を消しますか？（元に戻せません）');
+    if(!ok) return;
+    clearHistory();
+    refresh();
+  });
+
+  btnClearSave.addEventListener('click', ()=>{
+    const ok = confirm('全スロット・設定をすべて削除しますか？（元に戻せません）');
+    if(!ok) return;
+    try{
+      const ids = Object.keys(index);
+      for(const id of ids) localStorage.removeItem(slotKey(id));
+      localStorage.removeItem(KEY_INDEX);
+      localStorage.removeItem(KEY_PREFS);
+    }catch{}
+    index = {};
+    confirmSwitch = true;
+    currentSlotId = "0001";
+    emptyState();
+    index[currentSlotId] = {updated: Date.now(), status:'empty', filled:0};
+    try{ saveIndex(); }catch{}
+    clearHistory();
+    queueSave();
+    refresh();
+    alert('初期化しました');
+  });
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    const k = e.key;
+
+    // Undo: Ctrl/Cmd + Z [3](https://support.microsoft.com/en-us/office/undo-redo-or-repeat-an-action-84bdb9bc-4e23-4f06-ba78-f7b893eb2d28)
+    if((e.ctrlKey || e.metaKey) && !e.shiftKey && (k === 'z' || k === 'Z')){
+      doUndo();
+      e.preventDefault();
+      return;
+    }
+
+    // Redo: Ctrl+Y or Ctrl+Shift+Z / Cmd+Shift+Z [2](https://litera.app/blog/redo-shortcut/)[3](https://support.microsoft.com/en-us/office/undo-redo-or-repeat-an-action-84bdb9bc-4e23-4f06-ba78-f7b893eb2d28)
+    if((e.ctrlKey || e.metaKey) && (k === 'y' || k === 'Y')){
+      doRedo();
+      e.preventDefault();
+      return;
+    }
+    if((e.ctrlKey || e.metaKey) && e.shiftKey && (k === 'z' || k === 'Z')){
+      doRedo();
+      e.preventDefault();
+      return;
+    }
+
+    if(k>='1' && k<='9'){ inputDigit(Number(k)); e.preventDefault(); return; }
+    if(k==='Backspace' || k==='Delete'){ erase(); e.preventDefault(); return; }
+    if(k==='ArrowUp'){ sel.r=(sel.r+8)%9; refresh(); e.preventDefault(); return; }
+    if(k==='ArrowDown'){ sel.r=(sel.r+1)%9; refresh(); e.preventDefault(); return; }
+    if(k==='ArrowLeft'){ sel.c=(sel.c+8)%9; refresh(); e.preventDefault(); return; }
+    if(k==='ArrowRight'){ sel.c=(sel.c+1)%9; refresh(); e.preventDefault(); return; }
+
+    if(k==='m' || k==='M'){ tgMemo.click(); e.preventDefault(); return; }
+    if(k==='a' || k==='A'){ tgAuto.click(); e.preventDefault(); return; }
+    if(k==='g' || k==='G'){ tgGiven.click(); e.preventDefault(); return; }
+  });
+
+  // Modal helpers
+  function openModal(el){ el.classList.add('open'); }
+  function closeModal(el){ el.classList.remove('open'); }
+  document.querySelectorAll('[data-close]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-close');
+      closeModal(document.getElementById(id));
+    });
+  });
+  [modalSlots, modalMore].forEach(m=>{
+    m.addEventListener('click', (e)=>{
+      if(e.target === m) closeModal(m);
+    });
+  });
+
+  // Boot
+  function boot(){
+    initBoardUI();
+    loadPrefs();
+    tgConfirm.classList.toggle('on', confirmSwitch);
+    tgConfirm.textContent = `切替確認: ${confirmSwitch ? 'ON' : 'OFF'}`;
+
+    loadIndex();
+    if(!index || Object.keys(index).length===0){
+      index = {};
+      currentSlotId = "0001";
+      index[currentSlotId] = {updated: Date.now(), status:'empty', filled:0};
+      try{ saveIndex(); }catch{}
+      emptyState();
+      clearHistory();
+      queueSave();
+      refresh();
+      return;
+    }
+
+    const ids = Object.keys(index);
+    ids.sort((a,b)=> (index[b].updated||0) - (index[a].updated||0));
+    currentSlotId = ids[0] || "0001";
+
+    loadSlot(currentSlotId);
+    setSaveIndicator('saved');
+    clearHistory();
+    refresh();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
