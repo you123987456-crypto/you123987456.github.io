@@ -487,7 +487,6 @@
     </div>
 
     <div class="top-actions">
-      <button class="btn small" id="btnOpenIndex">Topへ</button>
       <button class="btn ghost" id="btnSlots" title="問題一覧">一覧</button>
       <button class="btn primary" id="btnNew" title="新しい問題">新規</button>
       <button class="btn" id="btnMore" title="その他">…</button>
@@ -583,6 +582,9 @@
         <div class="row" style="margin-bottom:8px;">
           <button class="btn small toggle on" id="tgConfirm">切替確認: ON</button>
         </div>
+<div class="row" style="margin-bottom:8px;">
+  <button class="btn small" id="btnOpenIndex">Top画面を開く</button>
+</div>
         <div class="row" style="margin-bottom:8px;">
           <button class="btn small" id="btnResetCurrent">この問題を空にする</button>
         </div>
@@ -1491,9 +1493,15 @@ function setValue(r,c,n){
       if(e.target === m) closeModal(m);
     });
   });
+
 document.getElementById('btnOpenIndex').addEventListener('click', ()=>{
+  if(confirmSwitch){
+    const ok = confirm('Top画面へ移動しますか？');
+    if(!ok) return;
+  }
   location.href = './index.html';
 });
+
   // Boot
   function boot(){
     initBoardUI();
