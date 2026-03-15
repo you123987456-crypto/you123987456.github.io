@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#0b0f17"/>
+<title>日記</title>
+
+<style>
+:root{
+  --bg:#0b0f17;
+  --text:#e8eefc;
+  --muted:#9fb0d0;
+  --line:rgba(255,255,255,.12);
+  --accent:#5aa7ff;
+  --ok:#2ce59b;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+}
+
+/* ボトムシート表示中のスクロールロック */
+body.lock{
+  position:fixed;
+  width:100%;
+  overflow:hidden;
+}
+
+.app{
+  min-height:100dvh;
+  padding:12px 12px calc(12px + env(safe-area-inset-bottom));
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  max-width:980px;
+  margin:auto;
+}
+
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+}
+
+.btn{
+  padding:8px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:transparent;
+  color:var(--text);
+  font-weight:700;
+}
+
+/* ★ 今日ボタンの強調色 */
+.btn.today{
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(90,167,255,.12);
+}
+.btn.today:active{
+  background: rgba(90,167,255,.22);
+}
+
+.card{
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:14px;
+}
+
+.input,.textarea{
+  width:100%;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#000;
+  color:var(--text);
+}
+.textarea{min-height:260px}
+
+/* ---------- Bottom Sheet ---------- */
+.sheet{
+  position:fixed;
+  inset:0;
+  display:none;
+  justify-content:center;
+  align-items:flex-end;
+  z-index:50;
+}
+.sheet.open{display:flex}
+
+.sheet-bg{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.6);
+}
+
+.sheet-body{
+  width:min(420px,100%);
+  background:#121a26;
+  border-radius:18px;
+  padding:12px;
+  transform:translateY(100%);
+  transition:.25s ease;
+}
+.sheet.open .sheet-body{transform:translateY(0)}
+
+.sheet-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:8px;
+}
+
+/* ---------- Calendar ---------- */
+.calendar{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  grid-template-rows:repeat(7,1fr); /* 曜日1行 + 6週 */
+  gap:6px;
+}
+
+.week{
+  font-size:11px;
+  color:var(--muted);
+  text-align:center;
+}
+
+.cal-cell{
+  aspect-ratio:1/1;
+  border-radius:10px;
+  border:1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  font-size:13px;
+}
+.cal-cell.other{opacity:.25}
+.cal-cell.today{outline:2px solid var(--accent)}
+.cal-cell.has{color:var(--ok)}
+
+.dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--ok);
+  margin-top:3px;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <div class="topbar">
+    <div id="dateLabel">YYYY-MM-DD</div>
+    <div>
+      <button class="btn" id="btnCalendar">一覧</button>
+      <button class="btn today" id="btnToday">今日</button>
+      <button class="btn" id="btnTop">Top</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <input class="input" type="date" id="dateInput"/>
+    <div style="height:8px"></div>
+    <textarea class="textarea" id="bodyInput" placeholder="今日の出来事…"></textarea>
+  </div>
+</div>
+
+<!-- Calendar Sheet -->
+<div class="sheet" id="calSheet">
+  <div class="sheet-bg"></div>
+  <div class="sheet-body">
+    <div class="sheet-head">
+      <button class="btn" id="prevMonth">◀</button>
+      <strong id="monthLabel"></strong>
+      <button class="btn" id="nextMonth">▶</button>
+    </div>
+
+    <div class="calendar" id="calendar">
+      <div class="week">日</div><div class="week">月</div><div class="week">火</div>
+      <div class="week">水</div><div class="week">木</div><div class="week">金</div>
+      <div class="week">土</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const KEY = 'diary:v1';
+
+  const dateLabel = document.getElementById('dateLabel');
+  const dateInput = document.getElementById('dateInput');
+  const bodyInput = document.getElementById('bodyInput');
+
+  const sheet = document.getElementById('calSheet');
+  const calendar = document.getElementById('calendar');
+  const monthLabel = document.getElementById('monthLabel');
+
+  let curDate = new Date();
+  let viewMonth = new Date();
+
+  /* ---- 日付ユーティリティ（ローカル専用） ---- */
+  function ymd(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function today(){
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  }
+
+  function load(){
+    bodyInput.value = localStorage.getItem(KEY+ymd(curDate)) || '';
+    dateLabel.textContent = ymd(curDate);
+    dateInput.value = ymd(curDate);
+  }
+  function save(){
+    localStorage.setItem(KEY+ymd(curDate), bodyInput.value);
+  }
+
+  bodyInput.addEventListener('input', save);
+
+  dateInput.addEventListener('change', e=>{
+    const [y,m,d] = e.target.value.split('-').map(Number);
+    curDate = new Date(y, m-1, d);
+    load();
+  });
+
+  /* ---------- Calendar ---------- */
+  function renderCalendar(){
+    calendar.querySelectorAll('.cal-cell').forEach(e=>e.remove());
+
+    const y = viewMonth.getFullYear();
+    const m = viewMonth.getMonth();
+    monthLabel.textContent = `${y}年 ${m+1}月`;
+
+    const first = new Date(y,m,1);
+    const start = new Date(first);
+    start.setDate(start.getDate() - start.getDay()); // 日曜始まり
+
+    for(let i=0;i<42;i++){
+      const d = new Date(start);
+      d.setDate(start.getDate()+i);
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell';
+      cell.textContent = d.getDate();
+
+      if(d.getMonth() !== m) cell.classList.add('other');
+      if(ymd(d) === ymd(today())) cell.classList.add('today');
+      if(localStorage.getItem(KEY+ymd(d))){
+        cell.classList.add('has');
+        cell.appendChild(document.createElement('div')).className='dot';
+      }
+
+      cell.onclick = ()=>{
+        curDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        load();
+        closeSheet();
+      };
+      calendar.appendChild(cell);
+    }
+  }
+
+  function openSheet(){
+    sheet.classList.add('open');
+    document.body.classList.add('lock');
+    renderCalendar();
+  }
+  function closeSheet(){
+    sheet.classList.remove('open');
+    document.body.classList.remove('lock');
+  }
+
+  document.getElementById('btnCalendar').onclick = openSheet;
+  document.querySelector('.sheet-bg').onclick = closeSheet;
+  document.getElementById('prevMonth').onclick = ()=>{viewMonth.setMonth(viewMonth.getMonth()-1);renderCalendar();}
+  document.getElementById('nextMonth').onclick = ()=>{viewMonth.setMonth(viewMonth.getMonth()+1);renderCalendar();}
+  document.getElementById('btnTop').onclick = ()=> location.href='./index.html';
+
+  document.getElementById('btnToday').onclick = ()=>{
+    curDate = today();
+    viewMonth = new Date(curDate);
+    load();
+  };
+
+  curDate = today();
+  viewMonth = new Date(curDate);
+  load();
+})();
+</script>
+</body>
+</html>
