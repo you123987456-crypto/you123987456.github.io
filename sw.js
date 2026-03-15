@@ -1,15 +1,19 @@
-// Minimal offline cache for index + main tool
-const CACHE_NAME = 'numberplace-pwa-v1';
+// Minimal offline cache for index + both tools
+const CACHE_NAME = 'local-tools-pwa-v2'; // ※更新反映のためバージョンを変えるの推奨
 const ASSETS = [
   './',
   './index.html',
   './NumberPlace.html',
-  './manifest.json'
+  './diary.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', (event)=>{
   event.waitUntil((async()=>{
     const cache = await caches.open(CACHE_NAME);
+    // iconが無い場合 addAll が失敗するので、無いならASSETSから2行消してください
     await cache.addAll(ASSETS);
     self.skipWaiting();
   })());
@@ -26,6 +30,7 @@ self.addEventListener('activate', (event)=>{
 self.addEventListener('fetch', (event)=>{
   const req = event.request;
   event.respondWith((async()=>{
+    // あなたの元SWと同じく、クエリ（?slot=... など）を無視してキャッシュ一致させる
     const cached = await caches.match(req, {ignoreSearch:true});
     if(cached) return cached;
     try{
@@ -33,7 +38,7 @@ self.addEventListener('fetch', (event)=>{
       return fresh;
     }catch(e){
       // fallback to index
-      return caches.match('./index.html');
+      return caches.match('./index.html', {ignoreSearch:true});
     }
   })());
 });
