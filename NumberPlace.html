@@ -197,9 +197,25 @@
     outline-offset:-3px;
     z-index:2;
   }
+
+/* 同じ数字が存在する行・列・ブロック（薄黄色） */
+.cell.same-peer{background: rgba(255, 209, 102, 0.12);}
+
+/* 同じ数字セルそのもの（濃い黄色） */
+.cell.same{
+  background: rgba(255, 209, 102, 0.22);
+}
+
+/* peer(青) が付いていたら青色を優先 */
+.cell.peer.same-peer{background: rgba(90,167,255,.10);}
   .cell.peer{ background: rgba(90,167,255,.10); }
-  .cell.same{ background: rgba(255,209,102,.16); }
+
   .cell.single{ background: rgba(44,229,155,.12); }
+
+/* given(緑) が付いていたら緑色を優先 */
+.cell.given.same-peer{
+  background: rgba(44, 229, 155, .22);
+}
 
   /* 固定マス：薄緑 */
   .cell.given{
@@ -209,6 +225,14 @@
     color: #eafff5;
     font-weight: 900;
   }
+
+
+.cell.given.same,
+.cell.given.same-peer,
+.cell.given.peer.same-peer{
+  background: rgba(44, 229, 155, 0.22);
+}
+
 
   /* 矛盾は赤優先 */
   .cell.conflict{ background: rgba(255,107,107,.18); }
@@ -223,6 +247,9 @@
     font-weight: 800;
     letter-spacing: .3px;
   }
+
+
+
 
 
 .notes{
@@ -469,6 +496,24 @@
   opacity: .9;
 }
 
+/* 青（メモ・自動候補） */
+.toggle.blue.on{
+  border-color: rgba(90,167,255,.55);
+  background: rgba(90,167,255,.18);
+}
+
+/* 緑（固定編集） */
+.toggle.green.on{
+  border-color: rgba(44,229,155,.55);
+  background: rgba(44,229,155,.18);
+}
+
+/* 黄（同数字範囲） */
+.toggle.yellow.on{
+  border-color: rgba(255,209,102,.55);
+  background: rgba(255,209,102,.22);
+}
+
 </style>
 </head>
 
@@ -502,11 +547,13 @@
   <div class="bottom">
     <div class="modebar">
       <div class="toggles">
-        <button class="btn small toggle" id="tgMemo">メモ: OFF</button>
-        <button class="btn small toggle good on" id="tgAuto">自動候補: ON</button>
+<button class="btn small toggle blue" id="tgAuto">自動候補</button>
+<button class="btn small toggle yellow" id="tgSamePeer">同数字範囲</button>
+
       </div>
       <div class="toggles">
-        <button class="btn small toggle warn" id="tgGiven">固定編集: OFF</button>
+<button class="btn small toggle blue" id="tgMemo">メモ</button>
+<button class="btn small toggle green" id="tgGiven">固定編集</button>
       </div>
     </div>
 
@@ -623,6 +670,7 @@
   const btnNew   = document.getElementById('btnNew');
   const btnMore  = document.getElementById('btnMore');
 
+  const tgSamePeer = document.getElementById('tgSamePeer');
   const tgMemo  = document.getElementById('tgMemo');
   const tgAuto  = document.getElementById('tgAuto');
   const tgGiven = document.getElementById('tgGiven');
@@ -655,7 +703,8 @@
 
   // UI state
   let memoMode = false;
-  let autoCand = true;
+  let autoCand = false;
+  let samePeerHighlight = false;
   let givenEdit = false;
 
   // Slots
@@ -974,63 +1023,102 @@ function updateHistoryButtons(){
     }
   }
 
-  function refresh(){
-    const masks = buildMasks();
-    const conflict = findConflicts();
-    const selV = values[sel.r][sel.c];
-    const selB = boxIndex(sel.r, sel.c);
+function refresh(){
+  const masks = buildMasks();
+  const conflict = findConflicts();
 
-    const p = computeProgress();
-    const b = badgeFor(p.status);
-    progressBadge.textContent = b.text;
-    progressBadge.className = 'badge ' + (b.cls || '');
-    slotLabel.textContent = `問題 #${Number(currentSlotId)}`;
+  const selV = values[sel.r][sel.c];
+  const selB = boxIndex(sel.r, sel.c);
 
-    for(let r=0;r<9;r++){
-      for(let c=0;c<9;c++){
-        const o = cells[idx(r,c)];
-        const cell = o.cell;
-        const v = values[r][c];
+  const p = computeProgress();
+  const b = badgeFor(p.status);
+  progressBadge.textContent = b.text;
+  progressBadge.className = 'badge ' + (b.cls || '');
+  slotLabel.textContent = `問題 #${Number(currentSlotId)}`;
 
-        cell.className = 'cell';
-        if(r===sel.r && c===sel.c) cell.classList.add('sel');
-        if(r===sel.r || c===sel.c || boxIndex(r,c)===selB) cell.classList.add('peer');
-        if(selV!==0 && v===selV) cell.classList.add('same');
-        if(conflict[r][c]) cell.classList.add('conflict');
-        if(givens[r][c]) cell.classList.add('given');
+  // ★ 同じ数字(selV)が存在する行/列/箱 を収集
+  const rowsWithSel = new Set();
+  const colsWithSel = new Set();
+  const boxesWithSel = new Set();
 
-        o.valEl.textContent = v===0 ? '' : String(v);
-        o.valEl.classList.toggle('given', givens[r][c]);
-
-        if(v!==0){
-          o.notesEl.style.display='none';
-          continue;
-        }
-        o.notesEl.style.display='grid';
-
-        const auto = autoCand ? allowedMask(r,c,masks) : 0;
-        const memo = memos[r][c];
-        const show = memo ? memo : auto;
-        const badMemo = memo & ~auto;
-
-        if(autoCand && auto!==0 && (auto & (auto-1))===0){
-          cell.classList.add('single');
-        }
-
-        for(let n=1;n<=9;n++){
-          const bit = 1<<(n-1);
-          const sp = o.spans[n-1];
-          sp.className = 'note';
-          if(show & bit) sp.classList.add('on');
-          if(memo & bit) sp.classList.add('memo');
-          if(badMemo & bit) sp.classList.add('bad');
+  if (samePeerHighlight && selV !== 0) {
+    for (let rr = 0; rr < 9; rr++) {
+      for (let cc = 0; cc < 9; cc++) {
+        if (values[rr][cc] === selV) {
+          rowsWithSel.add(rr);
+          colsWithSel.add(cc);
+          boxesWithSel.add(boxIndex(rr, cc));
         }
       }
     }
-
-    updateKeypadCounts();
-    updateHistoryButtons();
   }
+
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
+      const o = cells[idx(r,c)];
+      const cell = o.cell;
+      const v = values[r][c];
+
+      // リセット
+      cell.className = 'cell';
+
+      const isSel  = (r===sel.r && c===sel.c);
+      const isPeer = (r===sel.r || c===sel.c || boxIndex(r,c)===selB);
+
+      // 既存：選択セルと同じ行列ブロック
+      if(isSel) cell.classList.add('sel');
+      if(isPeer) cell.classList.add('peer');
+
+      // ★追加：同じ数字が存在する行/列/箱の「範囲」(薄黄色)
+      if(
+        samePeerHighlight &&
+        selV !== 0 &&
+        (rowsWithSel.has(r) || colsWithSel.has(c) || boxesWithSel.has(boxIndex(r,c)))
+      ){
+        cell.classList.add('same-peer');
+      }
+
+      // 既存：同じ数字セルそのもの（濃い黄色）
+      if(selV !== 0 && v === selV) cell.classList.add('same');
+
+      // 既存：矛盾・固定
+      if(conflict[r][c]) cell.classList.add('conflict');
+      if(givens[r][c]) cell.classList.add('given');
+
+      // 値表示
+      o.valEl.textContent = v===0 ? '' : String(v);
+      o.valEl.classList.toggle('given', givens[r][c]);
+
+      // 候補表示
+      if(v!==0){
+        o.notesEl.style.display='none';
+        continue;
+      }
+      o.notesEl.style.display='grid';
+
+      const auto = autoCand ? allowedMask(r,c,masks) : 0;
+      const memo = memos[r][c];
+      const show = memo ? memo : auto;
+      const badMemo = memo & ~auto;
+
+      if(autoCand && auto!==0 && (auto & (auto-1))===0){
+        cell.classList.add('single');
+      }
+
+      for(let n=1;n<=9;n++){
+        const bit = 1<<(n-1);
+        const sp = o.spans[n-1];
+        sp.className = 'note';
+        if(show & bit) sp.classList.add('on');
+        if(memo & bit) sp.classList.add('memo');
+        if(badMemo & bit) sp.classList.add('bad');
+      }
+    }
+  }
+
+  updateKeypadCounts();
+  updateHistoryButtons();
+}
 
   // Core edits with undo
 function setValue(r,c,n){
@@ -1327,20 +1415,24 @@ function setValue(r,c,n){
   tgMemo.addEventListener('click', ()=>{
     memoMode = !memoMode;
     tgMemo.classList.toggle('on', memoMode);
-    tgMemo.textContent = `メモ: ${memoMode ? 'ON' : 'OFF'}`;
   });
 
   tgAuto.addEventListener('click', ()=>{
     autoCand = !autoCand;
     tgAuto.classList.toggle('on', autoCand);
-    tgAuto.textContent = `自動候補: ${autoCand ? 'ON' : 'OFF'}`;
     refresh();
   });
+
+
+tgSamePeer.addEventListener('click', ()=>{
+  samePeerHighlight = !samePeerHighlight;
+  tgSamePeer.classList.toggle('on', samePeerHighlight);
+  refresh();
+});
 
   tgGiven.addEventListener('click', ()=>{
     givenEdit = !givenEdit;
     tgGiven.classList.toggle('on', givenEdit);
-    tgGiven.textContent = `固定編集: ${givenEdit ? 'ON' : 'OFF'}`;
   });
 
   btnSlots.addEventListener('click', ()=>{
