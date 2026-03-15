@@ -46,9 +46,20 @@ body.lock{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:10px 12px;
+  padding:8px 12px;
   border:1px solid var(--line);
   border-radius:var(--radius);
+}
+
+/* 日付ラベル（非操作） */
+.date-badge{
+  font-size:13px;
+  font-weight:700;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  color:var(--muted);
+  background:rgba(255,255,255,.03);
 }
 
 .btn{
@@ -60,7 +71,7 @@ body.lock{
   font-weight:700;
 }
 
-/* ★ 今日ボタンの強調色 */
+/* 今日ボタン */
 .btn.today{
   border-color: var(--accent);
   color: var(--accent);
@@ -74,17 +85,37 @@ body.lock{
   border:1px solid var(--line);
   border-radius:18px;
   padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
 
-.input,.textarea{
+/* ✅ 本文：サイズ固定 */
+.textarea{
   width:100%;
+  min-height:260px;
   padding:10px 12px;
   border-radius:12px;
   border:1px solid var(--line);
   background:#000;
   color:var(--text);
+  resize:none;          /* ← 手動リサイズ禁止 */
+  line-height:1.6;
 }
-.textarea{min-height:260px}
+
+/* ✅ タグ：1行 */
+.tag-input{
+  width:100%;
+  padding:8px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#000;
+  color:var(--text);
+  font-size:13px;
+}
+.tag-input::placeholder{
+  color:var(--muted);
+}
 
 /* ---------- Bottom Sheet ---------- */
 .sheet{
@@ -124,16 +155,14 @@ body.lock{
 .calendar{
   display:grid;
   grid-template-columns:repeat(7,1fr);
-  grid-template-rows:repeat(7,1fr); /* 曜日1行 + 6週 */
+  grid-template-rows:repeat(7,1fr);
   gap:6px;
 }
-
 .week{
   font-size:11px;
   color:var(--muted);
   text-align:center;
 }
-
 .cal-cell{
   aspect-ratio:1/1;
   border-radius:10px;
@@ -147,7 +176,6 @@ body.lock{
 .cal-cell.other{opacity:.25}
 .cal-cell.today{outline:2px solid var(--accent)}
 .cal-cell.has{color:var(--ok)}
-
 .dot{
   width:5px;height:5px;border-radius:50%;
   background:var(--ok);
@@ -159,7 +187,7 @@ body.lock{
 <body>
 <div class="app">
   <div class="topbar">
-    <div id="dateLabel">YYYY-MM-DD</div>
+    <div class="date-badge" id="dateLabel">YYYY-MM-DD</div>
     <div>
       <button class="btn" id="btnCalendar">一覧</button>
       <button class="btn today" id="btnToday">今日</button>
@@ -168,9 +196,8 @@ body.lock{
   </div>
 
   <div class="card">
-    <input class="input" type="date" id="dateInput"/>
-    <div style="height:8px"></div>
     <textarea class="textarea" id="bodyInput" placeholder="今日の出来事…"></textarea>
+    <input class="tag-input" id="tagInput" placeholder="タグ（例: 仕事, 体調, 家族）"/>
   </div>
 </div>
 
@@ -197,8 +224,8 @@ body.lock{
   const KEY = 'diary:v1';
 
   const dateLabel = document.getElementById('dateLabel');
-  const dateInput = document.getElementById('dateInput');
   const bodyInput = document.getElementById('bodyInput');
+  const tagInput  = document.getElementById('tagInput');
 
   const sheet = document.getElementById('calSheet');
   const calendar = document.getElementById('calendar');
@@ -207,7 +234,6 @@ body.lock{
   let curDate = new Date();
   let viewMonth = new Date();
 
-  /* ---- 日付ユーティリティ（ローカル専用） ---- */
   function ymd(d){
     const y = d.getFullYear();
     const m = String(d.getMonth()+1).padStart(2,'0');
@@ -220,23 +246,31 @@ body.lock{
   }
 
   function load(){
-    bodyInput.value = localStorage.getItem(KEY+ymd(curDate)) || '';
+    const raw = localStorage.getItem(KEY+ymd(curDate));
+    if(raw){
+      const data = JSON.parse(raw);
+      bodyInput.value = data.body || '';
+      tagInput.value  = data.tags || '';
+    }else{
+      bodyInput.value = '';
+      tagInput.value  = '';
+    }
     dateLabel.textContent = ymd(curDate);
-    dateInput.value = ymd(curDate);
   }
+
   function save(){
-    localStorage.setItem(KEY+ymd(curDate), bodyInput.value);
+    localStorage.setItem(
+      KEY+ymd(curDate),
+      JSON.stringify({
+        body: bodyInput.value,
+        tags: tagInput.value
+      })
+    );
   }
 
   bodyInput.addEventListener('input', save);
+  tagInput.addEventListener('input', save);
 
-  dateInput.addEventListener('change', e=>{
-    const [y,m,d] = e.target.value.split('-').map(Number);
-    curDate = new Date(y, m-1, d);
-    load();
-  });
-
-  /* ---------- Calendar ---------- */
   function renderCalendar(){
     calendar.querySelectorAll('.cal-cell').forEach(e=>e.remove());
 
@@ -246,7 +280,7 @@ body.lock{
 
     const first = new Date(y,m,1);
     const start = new Date(first);
-    start.setDate(start.getDate() - start.getDay()); // 日曜始まり
+    start.setDate(start.getDate() - start.getDay());
 
     for(let i=0;i<42;i++){
       const d = new Date(start);
@@ -287,7 +321,6 @@ body.lock{
   document.getElementById('prevMonth').onclick = ()=>{viewMonth.setMonth(viewMonth.getMonth()-1);renderCalendar();}
   document.getElementById('nextMonth').onclick = ()=>{viewMonth.setMonth(viewMonth.getMonth()+1);renderCalendar();}
   document.getElementById('btnTop').onclick = ()=> location.href='./index.html';
-
   document.getElementById('btnToday').onclick = ()=>{
     curDate = today();
     viewMonth = new Date(curDate);
