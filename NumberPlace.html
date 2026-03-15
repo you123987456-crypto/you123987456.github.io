@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>ナンプレ支援（スマホUI / 1000スロット / Undo・Redo）</title>
+<title>ナンプレ支援</title>
 <style>
   :root{
     --bg:#0b0f17;
@@ -198,16 +198,12 @@
     z-index:2;
   }
 
-/* 同じ数字が存在する行・列・ブロック（薄黄色） */
-.cell.same-peer{background: rgba(255, 209, 102, 0.12);}
-
 /* 同じ数字セルそのもの（濃い黄色） */
 .cell.same{
   background: rgba(255, 209, 102, 0.22);
 }
 
 /* peer(青) が付いていたら青色を優先 */
-.cell.peer.same-peer{background: rgba(90,167,255,.10);}
   .cell.peer{ background: rgba(90,167,255,.10); }
 
   .cell.single{ background: rgba(44,229,155,.12); }
@@ -226,13 +222,8 @@
     font-weight: 900;
   }
 
-
-.cell.given.same,
-.cell.given.same-peer,
-.cell.given.peer.same-peer{
-  background: rgba(44, 229, 155, 0.22);
-}
-
+/* 同じ数字が存在する行・列・ブロック（薄黄色） */
+.cell.same-peer{background: rgba(255, 209, 102, 0.12);}
 
   /* 矛盾は赤優先 */
   .cell.conflict{ background: rgba(255,107,107,.18); }
